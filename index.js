@@ -59,6 +59,21 @@ const reviewSchema = new mongoose.Schema({
   const Cart = mongoose.model("Cart", cartSchema);
   
   module.exports = Cart;
+
+  // Order Schema and Model
+const orderSchema = new mongoose.Schema({
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    products: [{
+      product_id: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+      quantity: Number,
+      price: Number,
+    }],
+    total_amount: Number,
+    status: { type: String, enum: ["created", "processing", "completed", "pending"], default: "created" },
+    created_at: { type: Date, default: Date.now }
+  });
+  
+  const Order = mongoose.model("Order", orderSchema);
 // Routes
 
 // Create a new product
@@ -341,7 +356,95 @@ app.patch("/carts/:productId/:userId", async (req, res) => {
       res.status(500).send(`Error deleting cart item: ${error.message}`);
     }
   });
+
+// Create an Order
+app.post("/orders", async (req, res) => {
+    try {
+      const { user_id, products, total_amount, status } = req.body;
+    
+      const order = new Order({ user_id, products, total_amount, status });
+      await order.save();
+      
+      const productIds = products.map(product => product.product_id);
+      await Cart.deleteMany({ product_id: { $in: productIds }, user_id });
   
+      res.status(201).json(order);
+    } catch (error) {
+      console.error("Error creating order:", error);
+      res.status(500).send(`Error creating order: ${error.message}`);
+    }
+  });
+  
+  
+  // Get All Orders
+  app.get("/orders", async (req, res) => {
+    try {
+      const orders = await Order.find();
+      res.json(orders);
+    } catch (error) {
+      console.error("Error getting orders:", error);
+      res.status(500).send(`Error getting orders: ${error.message}`);
+    }
+  });
+  
+  // Get an Order by ID
+  app.get("/orders/:id", async (req, res) => {
+    try {
+      const order = await Order.findById(req.params.id);
+      if (!order) {
+        return res.status(404).send("Order not found");
+      }
+      res.json(order);
+    } catch (error) {
+      console.error("Error getting order:", error);
+      res.status(500).send(`Error getting order: ${error.message}`);
+    }
+  });
+  
+ // Update an Order by ID
+app.patch("/orders/:id", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const { user_id, products, total_amount, status } = req.body;
+  
+      // Fetch the existing order
+      let order = await Order.findById(orderId);
+      if (!order) {
+        return res.status(404).send("Order not found");
+      }
+
+      order.user_id = user_id;
+      order.products = products;
+      order.total_amount = total_amount;
+      order.status = status;
+  
+      await order.save()
+      const currentProductIds = products.map(product => product.product_id);
+      const existingProductIds = order.products.map(product => product.product_id);
+      const productsToRemove = existingProductIds.filter(id => !currentProductIds.includes(id));
+      await Cart.deleteMany({ product_id: { $in: productsToRemove }, user_id });
+  
+      res.json(order);
+    } catch (error) {
+      console.error("Error updating order:", error);
+      res.status(500).send(`Error updating order: ${error.message}`);
+    }
+  });
+  
+  // Delete an Order by ID
+  app.delete("/orders/:id", async (req, res) => {
+    try {
+      const deletedOrder = await Order.findByIdAndDelete(req.params.id);
+      if (!deletedOrder) {
+        return res.status(404).send("Order not found");
+      }
+      res.json({ message: "Order deleted successfully" });
+    } catch (error) {
+         console.error("Error deleting order:", error);
+             res.status(500).send(`Error deleting order: ${error.message}`);
+    }
+  });
+
 // Start the server
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
