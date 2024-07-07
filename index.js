@@ -14,7 +14,7 @@ mongoose.connect(
   { useNewUrlParser: true, useUnifiedTopology: true }
 );
 
-// Product Schema and Model
+// Product Schema
 const productSchema = new mongoose.Schema({
     name: String,
     description: String,
@@ -25,7 +25,7 @@ const productSchema = new mongoose.Schema({
 
 const Product = mongoose.model("Product", productSchema);
 
-// User Schema and Model
+// User Schema 
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema({
   });
   
   const User = mongoose.model("User", userSchema);
-// Review Schema and Model
+// Review Schema 
 const reviewSchema = new mongoose.Schema({
     product_id: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -49,7 +49,16 @@ const reviewSchema = new mongoose.Schema({
   
   module.exports = Review;
   
-
+  //cart
+  const cartSchema = new mongoose.Schema({
+    product_id: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
+    quantity: Number,
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  });
+  
+  const Cart = mongoose.model("Cart", cartSchema);
+  
+  module.exports = Cart;
 // Routes
 
 // Create a new product
@@ -247,6 +256,89 @@ app.post("/reviews", async (req, res) => {
     } catch (error) {
       console.error("Error deleting review:", error);
       res.status(500).send(`Error deleting review: ${error.message}`);
+    }
+  });
+  
+ // Create a cart item or update quantity if already exists
+app.post("/carts", async (req, res) => {
+    try {
+      const { product_id, quantity, user_id } = req.body;
+  
+      // Check if a cart item already exists for the product_id and user_id
+      let cartItem = await Cart.findOne({ product_id, user_id });
+  
+      if (cartItem) {
+        cartItem.quantity += quantity;
+      } else {
+        cartItem = new Cart({ product_id, quantity, user_id });
+      }
+  
+      await cartItem.save();
+      res.status(201).json(cartItem);
+    } catch (error) {
+      console.error("Error creating or updating cart item:", error);
+      res.status(500).send(`Error creating or updating cart item: ${error.message}`);
+    }
+  });
+  
+  // Get all cart items
+  app.get("/carts", async (req, res) => {
+    try {
+      const cartItems = await Cart.find();
+      res.json(cartItems);
+    } catch (error) {
+      console.error("Error getting cart items:", error);
+      res.status(500).send(`Error getting cart items: ${error.message}`);
+    }
+  });
+  
+  // Get a cart item by ID
+  app.get("/carts/:id", async (req, res) => {
+    try {
+      const cartItem = await Cart.findById(req.params.id);
+      if (!cartItem) {
+        return res.status(404).send("Cart item not found");
+      }
+      res.json(cartItem);
+    } catch (error) {
+      console.error("Error getting cart item:", error);
+      res.status(500).send(`Error getting cart item: ${error.message}`);
+    }
+  });
+  
+// Update quantity of a cart item
+app.patch("/carts/:productId/:userId", async (req, res) => {
+    const { productId, userId } = req.params;
+    const { quantity } = req.body;
+  
+    try {
+      // Find the cart item by product_id and user_id
+      let cartItem = await Cart.findOne({ product_id: productId, user_id: userId });
+  
+      if (!cartItem) {
+        return res.status(404).send("Cart item not found");
+      }
+      cartItem.quantity = quantity;
+  
+      await cartItem.save();
+  
+      res.json(cartItem);
+    } catch (error) {
+      console.error("Error updating cart item:", error);
+      res.status(500).send(`Error updating cart item: ${error.message}`);
+    }
+  });
+  // Delete a cart item by ID
+  app.delete("/carts/:id", async (req, res) => {
+    try {
+      const deletedCartItem = await Cart.findByIdAndDelete(req.params.id);
+      if (!deletedCartItem) {
+        return res.status(404).send("Cart item not found");
+      }
+      res.json({ message: "Cart item deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting cart item:", error);
+      res.status(500).send(`Error deleting cart item: ${error.message}`);
     }
   });
   
